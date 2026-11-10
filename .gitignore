@@ -1,0 +1,9 @@
+node_modules
+dist
+.env
+.env.local
+*.local
+.DS_Store
+# fișiere de lucru ale Supabase local (conțin chei locale)
+supabase/.temp
+supabase/.branches

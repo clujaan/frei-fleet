@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Space Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  /* Paleta implicită a produsului (neutră), definită într-un singur loc: albastru-închis + turcoaz.
+     Valorile din PDF-uri/PWA stau în src/config/brand.js (COLORS). */
+  --color-navy-950: #0a111d;
+  --color-navy-900: #101a2c;
+  --color-navy-800: #14213d;
+  --color-navy-700: #1f3358;
+  --color-navy-600: #2c4a7a;
+
+  --color-brand-300: #7fd1c5;
+  --color-brand-400: #4dbdae;
+  --color-brand-500: #2a9d8f;
+  --color-brand-600: #1f7f74;
+
+  --color-paper: #f4f6fa;
+}
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--color-paper);
+  color: #0f1c33;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Etichete mici în stil „control center” */
+.mono-label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* Fundalul zonei de dashboard (închis) */
+.dash-bg {
+  background:
+    radial-gradient(1100px 520px at 85% -10%, rgba(42, 157, 143, 0.10), transparent 60%),
+    radial-gradient(900px 600px at 0% 100%, rgba(44, 74, 122, 0.35), transparent 60%),
+    var(--color-navy-950);
+  color: #e8eefc;
+}
+
+.scroll-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: rgba(120, 140, 170, 0.35);
+  border-radius: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Cifre „LED” portocalii, ca niște becuri aprinse */
+.led {
+  color: #ffb066;
+  text-shadow: 0 0 4px rgba(255, 150, 40, 0.95), 0 0 12px rgba(255, 120, 20, 0.75), 0 0 26px rgba(255, 100, 0, 0.45);
+  font-variant-numeric: tabular-nums;
+}
