@@ -30,7 +30,7 @@ Conturi de test (doar local): patron@/dispecer@/contabil@demo.test, parola `Demo
 - Etapa 0 (build verde): făcută.
 - Etapa 1 (schemă unificată `0001_baza.sql`, Supabase local, curățare): făcută.
 - Etapa 2 (Setări firmă, Utilizatori și roluri, culori/logo în PDF-uri, `0002`): făcută; în testare de Sergiu.
-- Etapa 3 (Flotă, cursa-circuit, comenzi multiple, grupaj + distribuție subcontractată, `0003`): scrisă; **în testare de Sergiu**. Repartizare decisă: LDM implicit, schimbabil pe cursă (DECIZII). Calcule în `src/lib/tripMoney.js` (teste `tests/tripMoney.test.mjs`).
+- Etapa 3 (Flotă, cursa-circuit, comenzi multiple, grupaj + distribuție subcontractată, `0003`): făcută; acceptare confirmată de Sergiu pe 2026-11-10 (cursa de test cu tur EUR + retur RON = 2.800 EUR). Repartizare decisă: LDM implicit, schimbabil pe cursă (DECIZII). Calcule în `src/lib/tripMoney.js` (teste `tests/tripMoney.test.mjs`).
 - Etapa 4 (costuri, combustibil, profit): urmează; P&L-ul și `calcTrip` din `trips.js` sunt încă pe modelul vechi.
 - Etapele 4–9: vezi spec secț. 13.
 
