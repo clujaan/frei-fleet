@@ -13,6 +13,10 @@ import { CT_GOODS_API, ORDERS_API, orderStatusLabel } from '../lib/orders'
 import { DRIVERS_API, TRAILERS_API, TRUCKS_API, activeOr, truckLabel } from '../lib/fleet'
 import { ALLOCATION_BASES, allocationShares, basisLabel, checkOwnTrip, distributionCosts, orderMeasures, orderValue, tripDays, tripKm, tripRevenue } from '../lib/tripMoney'
 import { bnrRateOrNull } from '../lib/bnr'
+import { COSTS_API, FUEL_API, computeFleet } from '../lib/fleetCostsApi'
+import { PER_DIEM_API } from '../lib/fleet'
+import { TRIP_LINES, categoryLabel } from '../lib/fleetCosts'
+import { CostModal } from './CosturiFlota'
 import LockGate from '../lib/editLock'
 import { ACTIVITY_API } from '../lib/activity'
 import { useReason } from '../components/ReasonModal'
@@ -66,7 +70,7 @@ async function fillFx(rows, api) {
 
 const EMPTY = { kind: 'own', truck_id: '', trailer_id: '', driver_id: '', driver2_id: '', start_at: '', end_at: '', km_start: '', km_end: '', km: '', countries: [], status: 'Planificată', allocation_basis: '', notes: '' }
 
-function TripModal({ initial, fleet, clients, carriers, ccRows, ctRows, links, onClose, onSaved, onChanged }) {
+function TripModal({ initial, fleet, clients, carriers, ccRows, ctRows, links, pnl, trips, onClose, onSaved, onChanged }) {
   const tx = useTx()
   const { lang } = useLang()
   const reportCur = getCompany().report_currency || 'EUR'
@@ -85,6 +89,7 @@ function TripModal({ initial, fleet, clients, carriers, ccRows, ctRows, links, o
   const [cancelReason, setCancelReason] = useState('')
   const [addId, setAddId] = useState('')
   const [addCountry, setAddCountry] = useState('')
+  const [costModal, setCostModal] = useState(null)
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }))
   const own = f.kind !== 'subcontracted'
 
@@ -227,7 +232,7 @@ function TripModal({ initial, fleet, clients, carriers, ccRows, ctRows, links, o
           {orders.length > 0 && (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-[13px]">
-                <thead className="text-[10.5px] uppercase tracking-wider text-slate-500"><tr><th className="px-3 py-2">{tx('Comandă', 'Order')}</th><th className="px-3 py-2">{tx('Client / traseu', 'Customer / route')}</th><th className="px-3 py-2">{tx('Marfă', 'Goods')}</th><th className="px-3 py-2 text-right">{tx('Preț', 'Price')}</th><th className="px-3 py-2 text-right">{reportCur}</th><th className="px-3 py-2 text-right" title={tx('Partea din costul cursei', 'Share of the trip cost')}>{tx('Pondere', 'Share')}</th><th className="px-3 py-2 text-right">{tx('Distribuție', 'Distribution')}</th><th /></tr></thead>
+                <thead className="text-[10.5px] uppercase tracking-wider text-slate-500"><tr><th className="px-3 py-2">{tx('Comandă', 'Order')}</th><th className="px-3 py-2">{tx('Client / traseu', 'Customer / route')}</th><th className="px-3 py-2">{tx('Marfă', 'Goods')}</th><th className="px-3 py-2 text-right">{tx('Preț', 'Price')}</th><th className="px-3 py-2 text-right">{reportCur}</th><th className="px-3 py-2 text-right" title={tx('Partea din costul cursei', 'Share of the trip cost')}>{tx('Pondere', 'Share')}</th><th className="px-3 py-2 text-right">{tx('Distribuție', 'Distribution')}</th><th className="px-3 py-2 text-right" title={tx('Venit − costul cursei repartizat − distribuția', 'Revenue − allocated trip cost − distribution')}>{tx('Profit', 'Profit')}</th><th /></tr></thead>
                 <tbody>
                   {orders.map((o) => {
                     const v = orderValue(o, reportCur)
@@ -241,13 +246,14 @@ function TripModal({ initial, fleet, clients, carriers, ccRows, ctRows, links, o
                         <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{o.status === 'Anulată' ? '—' : v.ok ? fmtMoney(v.value) : <span className="text-amber-700" title={tx('Lipsește cursul RON/EUR', 'RON/EUR rate missing')}>⚠ {tx('fără curs', 'no rate')}</span>}</td>
                         <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{sh != null ? `${(sh * 100).toFixed(1)}%` : '—'}</td>
                         <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{dist.byOrder[o.id] ? fmtMoney(dist.byOrder[o.id]) : '—'}</td>
+                        <td className={`whitespace-nowrap px-3 py-2 text-right tabular-nums ${(pnl?.byOrder[o.id]?.profit ?? 0) < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>{pnl?.byOrder[o.id] ? fmtMoney(pnl.byOrder[o.id].profit) : '—'}</td>
                         <td className="whitespace-nowrap px-3 py-2 text-right"><button type="button" title={tx('Scoate din cursă (comanda rămâne)', 'Remove from trip (order stays)')} onClick={() => attach(o.id, null)} className="rounded px-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600">⤺</button></td>
                       </tr>
                     )
                   })}
                 </tbody>
                 <tfoot className="border-t border-slate-200 bg-slate-50 font-semibold text-navy-800">
-                  <tr><td colSpan={4} className="px-3 py-2 text-right">{tx('Venit cursă', 'Trip revenue')}</td><td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{fmtMoney(rev.total)} {reportCur}</td><td /><td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{fmtMoney(Object.values(dist.byOrder).reduce((s, x) => s + x, 0))}</td><td /></tr>
+                  <tr><td colSpan={4} className="px-3 py-2 text-right">{tx('Venit cursă', 'Trip revenue')}</td><td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{fmtMoney(rev.total)} {reportCur}</td><td /><td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{fmtMoney(Object.values(dist.byOrder).reduce((s, x) => s + x, 0))}</td><td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{pnl ? fmtMoney(pnl.contribution) : ''}</td><td /></tr>
                 </tfoot>
               </table>
             </div>
@@ -279,6 +285,9 @@ function TripModal({ initial, fleet, clients, carriers, ccRows, ctRows, links, o
           </div>
         )}
 
+        {rid && pnl && <TripCosts pnl={pnl} own={own} reportCur={reportCur} onAdd={() => setCostModal({ truck_id: f.truck_id || null, driver_id: f.driver_id || null, alloc_mode: 'trip', trip_id: rid, occurred_at: model.end_at || new Date().toISOString(), category: 'toll' })} />}
+        {costModal && <CostModal initial={costModal} ctx={{ trips, trucks: fleet.trucks, drivers: fleet.drivers, truckById }} onClose={() => setCostModal(null)} onSaved={(_r, stay) => { onChanged(); if (!stay) setCostModal(null) }} />}
+
         {warns.filter((w) => !['dates', 'sameDriver', 'km'].includes(w)).map((w) => <p key={w} className="mt-1 text-[12.5px] text-amber-700">⚠ {{
           truck: tx('Alege camionul.', 'Pick the truck.'), driver: tx('Alege șoferul.', 'Pick the driver.'), start: tx('Completează plecarea din bază.', 'Fill in the departure from base.'),
           noOrders: tx('Cursa nu are nicio comandă activă.', 'The trip has no active order.'),
@@ -293,6 +302,55 @@ function TripModal({ initial, fleet, clients, carriers, ccRows, ctRows, links, o
   )
 }
 
+// Costuri și profit pe cursă (din fleetCosts.tripPnL; se actualizează după salvare)
+function TripCosts({ pnl, own, reportCur, onAdd }) {
+  const tx = useTx()
+  const { lang } = useLang()
+  const lines = TRIP_LINES.filter((k) => pnl.lines[k])
+  const W = {
+    fx: tx('Unele sume nu au curs RON/EUR și nu intră în total.', 'Some amounts have no RON/EUR rate and are left out.'),
+    perDiemRate: tx('Un șofer nu are tarif de diurnă (Flotă → Șoferi).', 'A driver has no per diem rate (Fleet → Drivers).'),
+    perDiemFx: tx('Diurna în RON nu are curs; trece cursul pe o comandă.', 'Per diem in RON has no rate; set a rate on an order.'),
+    running: tx('Cursa nu are întoarcere: costurile și diurna sunt până azi.', 'The trip has no return yet: costs and per diem are up to today.'),
+    consumption: tx('Consumul e cu peste 10% mai mare decât cel de referință.', 'Consumption is more than 10% above reference.'),
+  }
+  return (
+    <div className="mt-3 rounded-xl border border-slate-200">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2">
+        <div className="mono-label text-[10px] text-slate-500">{tx('COSTURI ȘI PROFIT', 'COSTS AND PROFIT')} · {reportCur}</div>
+        <div className="flex flex-wrap gap-2">
+          <Link to="/costuri-flota" className="rounded-lg px-3 py-1 text-[13px] text-slate-600 hover:bg-slate-100">{tx('Toate costurile →', 'All costs →')}</Link>
+          <button type="button" onClick={onAdd} className="rounded-lg border border-brand-500 px-3 py-1 text-[13px] text-brand-600 hover:bg-brand-500/10">＋ {tx('Cost pe cursă', 'Trip cost')}</button>
+        </div>
+      </div>
+      <div className="grid gap-4 p-3 sm:grid-cols-[1fr_auto]">
+        <table className="w-full text-[13px]">
+          <tbody>
+            <tr><td className="py-1 text-slate-600">{tx('Venit', 'Revenue')}</td><td className="py-1 text-right font-medium tabular-nums">{fmtMoney(pnl.revenue)}</td></tr>
+            {lines.map((k) => (
+              <tr key={k} className="border-t border-slate-100">
+                <td className="py-1 text-slate-600">− {categoryLabel(k, lang)}{k === 'per_diem' && pnl.perDiem?.byDriver.length > 0 && <span className="text-[11.5px] text-slate-400"> ({pnl.perDiem.byDriver.map((d) => `${d.days} × ${fmtMoney(d.rate)} ${d.currency}`).join(' + ')}{pnl.perDiem.estimated ? `, ${tx('până azi', 'up to today')}` : ''})</span>}</td>
+                <td className="py-1 text-right tabular-nums">{fmtMoney(pnl.lines[k])}</td>
+              </tr>
+            ))}
+            {lines.length === 0 && <tr className="border-t border-slate-100"><td colSpan={2} className="py-1 text-slate-500">{tx('Niciun cost legat de cursă încă.', 'No cost linked to the trip yet.')}</td></tr>}
+            <tr className="border-t border-slate-200 font-semibold"><td className="py-1.5">{tx('Profit cursă (contribuție)', 'Trip profit (contribution)')}</td><td className={`py-1.5 text-right tabular-nums ${pnl.contribution < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>{fmtMoney(pnl.contribution)}{pnl.marginPct != null ? ` · ${pnl.marginPct}%` : ''}</td></tr>
+          </tbody>
+        </table>
+        {own && (
+          <div className="grid min-w-[200px] grid-cols-2 gap-2 text-[12px] sm:grid-cols-1">
+            <div className="rounded-lg bg-slate-50 p-2"><div className="text-slate-500">{tx('Cost / km', 'Cost / km')}</div><div className="text-[14px] font-medium tabular-nums">{pnl.costPerKm != null ? `${fmtMoney(pnl.costPerKm)} ${reportCur}` : '—'}</div></div>
+            <div className="rounded-lg bg-slate-50 p-2"><div className="text-slate-500">{tx('Venit / km', 'Revenue / km')}</div><div className="text-[14px] font-medium tabular-nums">{pnl.revenuePerKm != null ? `${fmtMoney(pnl.revenuePerKm)} ${reportCur}` : '—'}</div></div>
+            <div className="col-span-2 rounded-lg bg-slate-50 p-2 sm:col-span-1"><div className="text-slate-500">{tx('Consum real / referință', 'Actual / reference consumption')}</div><div className={`text-[14px] font-medium tabular-nums ${pnl.warnings.includes('consumption') ? 'text-amber-700' : ''}`}>{pnl.consumption != null ? `${fmtMoney(pnl.consumption)} l/100` : '—'} / {pnl.refConsumption ? `${fmtMoney(pnl.refConsumption)}` : '—'}</div><div className="text-slate-400">{fmtMoney(pnl.liters)} l · {pnl.km || 0} km</div></div>
+          </div>
+        )}
+      </div>
+      {pnl.warnings.length > 0 && <div className="space-y-0.5 border-t border-slate-100 px-3 py-2 text-[12px] text-amber-700">{pnl.warnings.map((w) => <p key={w}>⚠ {W[w]}</p>)}</div>}
+      <p className="border-t border-slate-100 px-3 py-2 text-[11.5px] text-slate-500">{tx('Costurile cu camion se leagă singure de cursă dacă data e între plecare și întoarcere. Salariile și costurile fixe sunt lunare (pagina Profit). Cifrele se actualizează după salvare.', 'Truck costs link to the trip by themselves if the date is between departure and return. Salaries and fixed costs are monthly (Profit page). Figures update after saving.')}</p>
+    </div>
+  )
+}
+
 const SORTS = {
   code: (a, b) => a.t.code.localeCompare(b.t.code, 'en', { numeric: true }),
   start: (a, b) => String(a.t.start_at || a.t.load_date || '').localeCompare(String(b.t.start_at || b.t.load_date || '')),
@@ -300,6 +358,7 @@ const SORTS = {
   driver: (a, b) => foldText(a.driver).localeCompare(foldText(b.driver)),
   orders: (a, b) => a.orders.length - b.orders.length,
   revenue: (a, b) => a.rev.total - b.rev.total,
+  profit: (a, b) => (a.pnl?.contribution || 0) - (b.pnl?.contribution || 0),
 }
 
 export default function Curse() {
@@ -313,6 +372,7 @@ export default function Curse() {
   const [ccRows, setCcRows] = useState([])
   const [ctRows, setCtRows] = useState([])
   const [links, setLinks] = useState([])
+  const [extra, setExtra] = useState({ costs: [], moves: [], rates: [] })
   const [err, setErr] = useState('')
   const [modal, setModal] = useState(null)
   const [askReasonMain, reasonNodeMain] = useReason()
@@ -328,8 +388,9 @@ export default function Curse() {
     TRIPS_API.list(), CLIENTS.api.list().catch(() => []), CARRIERS.api.list().catch(() => []),
     TRUCKS_API.list().catch(() => []), TRAILERS_API.list().catch(() => []), DRIVERS_API.list().catch(() => []),
     CLIENT_ORDERS_API.list().catch(() => []), ORDERS_API.list().catch(() => []), CT_GOODS_API.list().catch(() => []),
-  ]).then(([r, c, k, tk, tr, dr, cc, ct, ln]) => {
-    setRows(r); setClients(c); setCarriers(k); setFleet({ trucks: tk, trailers: tr, drivers: dr }); setCcRows(cc); setCtRows(ct); setLinks(ln)
+    COSTS_API.list().catch(() => []), FUEL_API.list().catch(() => []), PER_DIEM_API.list().catch(() => []),
+  ]).then(([r, c, k, tk, tr, dr, cc, ct, ln, co, mv, rt]) => {
+    setRows(r); setClients(c); setCarriers(k); setFleet({ trucks: tk, trailers: tr, drivers: dr }); setCcRows(cc); setCtRows(ct); setLinks(ln); setExtra({ costs: co, moves: mv, rates: rt })
   }).catch((e) => setErr(e.message))
   useEffect(() => { load() }, [])
 
@@ -339,6 +400,7 @@ export default function Curse() {
   const cName = useMemo(() => Object.fromEntries(clients.map((c) => [c.id, c.company])), [clients])
   const ordersByTrip = useMemo(() => { const m = {}; for (const o of ccRows) if (o.trip_id) (m[o.trip_id] ||= []).push(o); return m }, [ccRows])
   const freeOrders = ccRows.filter((o) => !o.trip_id && o.status !== 'Anulată').length
+  const calc = useMemo(() => computeFleet({ trips: rows || [], orders: ccRows, cts: ctRows, links, trucks: fleet.trucks, ...extra }, reportCur), [rows, ccRows, ctRows, links, fleet.trucks, extra, reportCur])
 
   const enriched = useMemo(() => (rows || []).map((t) => {
     const orders = ordersByTrip[t.id] || []
@@ -349,8 +411,9 @@ export default function Curse() {
     const warns = checkOwnTrip(t, orders)
     if (rev.missingFx.length) warns.push('fx')
     const hay = foldText([t.code, truck, trailerById[t.trailer_id]?.plate, driver, ...clientsTxt, ...orders.map((o) => `${o.code} ${orderRoute(o)}`), (t.countries || []).join(' '), t.notes, tripStatusLabel(t.status, lang)].join(' | '))
-    return { t, orders, rev, truck, driver, clientsTxt, warns, hay }
-  }), [rows, ordersByTrip, truckById, trailerById, driverById, cName, reportCur, lang])
+    const pnl = calc.pnlById[t.id]
+    return { t, orders, rev, pnl, truck, driver, clientsTxt, warns, hay }
+  }), [rows, ordersByTrip, truckById, trailerById, driverById, cName, reportCur, lang, calc])
 
   const months = [...new Set(enriched.map((e) => monthOf(e.t)).filter(Boolean))].sort().reverse()
   const terms = foldText(q).split(/\s+/).filter(Boolean)
@@ -403,8 +466,8 @@ export default function Curse() {
       {reasonNodeMain}
       {err && <p className="mt-3 text-rose-600">{err}</p>}
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-5">
-        {[[tx('CURSE ÎN LUNA ASTA', 'TRIPS THIS MONTH'), thisMonth.length, ''], [tx('VENIT (LUNA ASTA)', 'REVENUE (THIS MONTH)'), fmtMoney(thisMonth.reduce((s, e) => s + e.rev.total, 0)), reportCur], [tx('ÎN DESFĂȘURARE', 'IN PROGRESS'), running, '']].map(([l, v, u]) => (
+      <div className="mt-5 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        {[[tx('CURSE ÎN LUNA ASTA', 'TRIPS THIS MONTH'), thisMonth.length, ''], [tx('VENIT (LUNA ASTA)', 'REVENUE (THIS MONTH)'), fmtMoney(thisMonth.reduce((s, e) => s + e.rev.total, 0)), reportCur], [tx('PROFIT CURSE (LUNA ASTA)', 'TRIP PROFIT (THIS MONTH)'), fmtMoney(thisMonth.reduce((s, e) => s + (e.pnl?.contribution || 0), 0)), reportCur], [tx('ÎN DESFĂȘURARE', 'IN PROGRESS'), running, '']].map(([l, v, u]) => (
           <div key={l} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="mono-label text-[10px] text-slate-500">{l}</div>
             <div className="mt-1 text-[24px] font-semibold text-navy-800">{v} <span className="text-[13px] font-normal text-slate-500">{u}</span></div>
@@ -435,10 +498,10 @@ export default function Curse() {
         {rows === null ? <p className="p-5 text-slate-500">…</p> : filtered.length === 0 ? <p className="p-5 text-slate-500">{tx('Nicio cursă.', 'No trips.')}</p> : (
           <table className="w-full text-left text-[13.5px]">
             <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500">
-              <tr>{th('code', tx('Cod', 'Code'))}{th('start', tx('Plecare → întoarcere', 'Departure → return'))}{th('truck', tx('Camion', 'Truck'), 'hidden md:table-cell')}{th('driver', tx('Șofer', 'Driver'), 'hidden sm:table-cell')}{th('orders', tx('Comenzi', 'Orders'))}{th('revenue', `${tx('Venit', 'Revenue')} (${reportCur})`, 'text-right')}<th className="px-3 py-2.5">{tx('Status', 'Status')}</th><th className="px-3 py-2.5" /></tr>
+              <tr>{th('code', tx('Cod', 'Code'))}{th('start', tx('Plecare → întoarcere', 'Departure → return'))}{th('truck', tx('Camion', 'Truck'), 'hidden md:table-cell')}{th('driver', tx('Șofer', 'Driver'), 'hidden sm:table-cell')}{th('orders', tx('Comenzi', 'Orders'))}{th('revenue', `${tx('Venit', 'Revenue')} (${reportCur})`, 'text-right')}{th('profit', tx('Profit', 'Profit'), 'text-right')}<th className="px-3 py-2.5">{tx('Status', 'Status')}</th><th className="px-3 py-2.5" /></tr>
             </thead>
             <tbody>
-              {filtered.map(({ t, orders, rev, truck, driver, clientsTxt, warns }) => (
+              {filtered.map(({ t, orders, rev, pnl, truck, driver, clientsTxt, warns }) => (
                 <tr key={t.id} className={`cursor-pointer border-t border-slate-100 hover:bg-slate-50 ${t.status === 'Anulată' ? 'opacity-50' : ''}`} onClick={() => setModal(t)}>
                   <td className="whitespace-nowrap px-3 py-3 font-medium text-navy-700">{t.code}{t.kind === 'subcontracted' && <div className="mono-label text-[9px] font-normal text-violet-700">{tx('SUBCONTRACTATĂ', 'SUBCONTRACTED')}</div>}</td>
                   <td className="whitespace-nowrap px-3 py-3">{t.start_at ? fmtDT(t.start_at) : fmtDate(t.load_date)}<div className="text-[11.5px] text-slate-500">{t.end_at ? `→ ${fmtDT(t.end_at)}` : '→ …'}{tripDays(t.start_at, t.end_at) ? ` · ${tripDays(t.start_at, t.end_at)} ${tx('zile', 'days')}` : ''}</div></td>
@@ -450,19 +513,20 @@ export default function Curse() {
                     {warns.length > 0 && t.status !== 'Anulată' && <div className="text-[11.5px] text-amber-600">⚠ {{ truck: tx('fără camion', 'no truck'), driver: tx('fără șofer', 'no driver'), start: tx('fără dată de plecare', 'no departure'), noOrders: tx('fără comenzi', 'no orders'), fx: tx('comenzi fără curs', 'orders without rate'), dates: tx('date greșite', 'wrong dates'), km: tx('km greșiți', 'wrong km'), sameDriver: tx('același șofer de 2 ori', 'same driver twice') }[warns[0]]}</div>}
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums">{fmtMoney(rev.total)}{rev.missingFx.length > 0 && <div className="text-[11px] text-amber-600">+ {rev.missingFx.length} {tx('fără curs', 'no rate')}</div>}</td>
+                  <td className={`whitespace-nowrap px-3 py-3 text-right tabular-nums ${!pnl || t.status === 'Anulată' ? '' : pnl.contribution < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>{pnl && t.status !== 'Anulată' ? fmtMoney(pnl.contribution) : '—'}{pnl?.marginPct != null && t.status !== 'Anulată' && <div className="text-[11px] text-slate-500">{pnl.marginPct}%</div>}</td>
                   <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}><select aria-label={tx('Status', 'Status')} value={t.status} onChange={(e) => setTripStatus(t, e.target.value)} className={`mono-label cursor-pointer rounded-full border px-2 py-0.5 text-[10px] outline-none ${TRIP_STYLE[t.status] || ''}`}>{[...new Set([...OWN_STATUSES, t.status])].map((x) => <option key={x} value={x}>{tripStatusLabel(x, lang)}</option>)}</select></td>
                   <td className="whitespace-nowrap px-3 py-3 text-right" onClick={(e) => e.stopPropagation()}><button title={tx('Șterge', 'Delete')} onClick={() => remove(t)} className="rounded px-2 py-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600">✕</button></td>
                 </tr>
               ))}
             </tbody>
             <tfoot className="border-t border-slate-200 bg-slate-50 text-[13px] font-semibold text-navy-800">
-              <tr><td colSpan={5} className="px-3 py-2.5 text-right">{tx('Total', 'Total')} ({live(filtered).length})</td><td className="px-3 py-2.5 text-right tabular-nums">{fmtMoney(live(filtered).reduce((s, e) => s + e.rev.total, 0))} {reportCur}</td><td colSpan={2} /></tr>
+              <tr><td colSpan={5} className="px-3 py-2.5 text-right">{tx('Total', 'Total')} ({live(filtered).length})</td><td className="px-3 py-2.5 text-right tabular-nums">{fmtMoney(live(filtered).reduce((s, e) => s + e.rev.total, 0))} {reportCur}</td><td className="px-3 py-2.5 text-right tabular-nums">{fmtMoney(live(filtered).reduce((s, e) => s + (e.pnl?.contribution || 0), 0))}</td><td colSpan={2} /></tr>
             </tfoot>
           </table>
         )}
       </div>
-      <p className="mt-2 text-[12px] text-slate-500">{tx('Venitul cursei = suma comenzilor neanulate, convertită în moneda de raportare la cursul fiecărei comenzi (RON pentru 1 EUR). Costurile și profitul pe cursă vin în etapa următoare.', 'Trip revenue = sum of non-cancelled orders, converted to the reporting currency at each order’s rate (RON per 1 EUR). Costs and profit per trip come in the next stage.')}</p>
-      {modal && <LockGate entity="trips" id={modal.id} label={modal.code} onClose={() => setModal(null)}><TripModal initial={modal.id ? modal : null} fleet={fleet} clients={clients} carriers={carriers} ccRows={ccRows} ctRows={ctRows} links={links} onClose={() => setModal(null)} onSaved={(_, keep) => { if (!keep) setModal(null); load() }} onChanged={load} /></LockGate>}
+      <p className="mt-2 text-[12px] text-slate-500">{tx('Venitul cursei = suma comenzilor neanulate, convertită în moneda de raportare la cursul fiecărei comenzi (RON pentru 1 EUR). Profit = venit − costurile directe ale cursei (combustibil, taxe, diurnă, cheltuieli șofer, CT-uri). Salariile și costurile fixe sunt lunare: le vezi în pagina Profit.', 'Trip revenue = sum of non-cancelled orders, converted to the reporting currency at each order’s rate (RON per 1 EUR). Profit = revenue − the trip’s direct costs (fuel, tolls, per diem, driver expenses, CTs). Salaries and fixed costs are monthly: see the Profit page.')}</p>
+      {modal && <LockGate entity="trips" id={modal.id} label={modal.code} onClose={() => setModal(null)}><TripModal initial={modal.id ? modal : null} pnl={modal.id ? calc.pnlById[modal.id] : null} trips={rows || []} fleet={fleet} clients={clients} carriers={carriers} ccRows={ccRows} ctRows={ctRows} links={links} onClose={() => setModal(null)} onSaved={(_, keep) => { if (!keep) setModal(null); load() }} onChanged={load} /></LockGate>}
     </div>
   )
 }

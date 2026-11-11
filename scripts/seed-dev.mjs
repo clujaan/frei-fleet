@@ -3,7 +3,8 @@
 //   npm run seed:dev
 // Creează: 3 utilizatori (patron, dispecer, contabil), datele firmei de test, 3 clienți, 1 transportator,
 // 4 camioane, 3 remorci, 3 șoferi (cu salariu și diurnă), 4 curse (încheiată, în desfășurare, planificată, subcontractată),
-// lead-uri, interacțiuni, adrese, transportatori, oferte de la burse, cheltuieli, deconturi și costurile camioanelor (Tools).
+// lead-uri, interacțiuni, adrese, transportatori, oferte de la burse, cheltuieli, deconturi și costurile camioanelor (Tools),
+// costuri flotă (card, taxe, rezervor bază, costuri fixe, salariu pe lună) — Etapa 4, după migrarea 0004.
 // Cheia „service role” a bazei LOCALE se citește automat din `npx supabase status`.
 import { execSync } from 'node:child_process'
 import { createClient } from '@supabase/supabase-js'
@@ -69,8 +70,10 @@ const ensure = async (table, col, row) => {
 
 const trailers = []
 for (const t of [{ plate: 'XX01RMA', trailer_type: 'Prelată' }, { plate: 'XX02RMB', trailer_type: 'Megatrailer' }, { plate: 'XX03RMC', trailer_type: 'Frigorific' }]) trailers.push(await ensure('trailers', 'plate', t))
-const trucks = []
-for (const [i, t] of [{ plate: 'XX10ABC', make: 'Marcă A', model: 'Model 1', year: 2021, ref_consumption: 29.5 }, { plate: 'XX20DEF', make: 'Marcă B', model: 'Model 2', year: 2019, ref_consumption: 31 }, { plate: 'XX30GHI', make: 'Marcă A', model: 'Model 3', year: 2023, ref_consumption: 28 }, { plate: 'XX40JKL', make: 'Marcă C', model: 'Model 4', year: 2018, ref_consumption: 32 }].entries()) {
+// dacă baza are deja camioane (ex. redenumite în aplicație), le folosim pe acelea și nu mai creăm altele
+const existingTrucks = (await db.from('trucks').select('*').order('code')).data || []
+const trucks = existingTrucks.length >= 4 ? existingTrucks.slice(0, 4) : []
+if (!trucks.length) for (const [i, t] of [{ plate: 'XX10ABC', make: 'Marcă A', model: 'Model 1', year: 2021, ref_consumption: 29.5 }, { plate: 'XX20DEF', make: 'Marcă B', model: 'Model 2', year: 2019, ref_consumption: 31 }, { plate: 'XX30GHI', make: 'Marcă A', model: 'Model 3', year: 2023, ref_consumption: 28 }, { plate: 'XX40JKL', make: 'Marcă C', model: 'Model 4', year: 2018, ref_consumption: 32 }].entries()) {
   trucks.push(await ensure('trucks', 'plate', { ...t, label: `${t.make} ${t.model}`, status: 'Activ', currency: 'EUR', default_trailer_id: trailers[i]?.id || null }))
 }
 const drivers = []
@@ -250,6 +253,57 @@ if (!(await one('transport_orders', 'notes', 'DEMO: cursă dată la subcontracto
   if (error) throw new Error(`transport_orders: ${error.message}`)
   const { error: e2 } = await db.from('transport_order_goods').insert({ transport_order_id: ct.id, client_order_id: subOrder.id })
   if (e2) throw e2
+}
+
+// ---- Etapa 4: costuri flotă, rezervor bază, costuri fixe, salariu pe lună — totul FICTIV ----
+const hasE4 = !(await db.from('costs').select('id').limit(1)).error
+if (!hasE4) console.log('Atenție: migrarea 0004 nu e aplicată (npx supabase migration up). Sar peste costurile Etapei 4.')
+else {
+  // camioanele și șoferii curselor demo (dacă i-ai redenumit în aplicație, costurile tot pe ele cad)
+  const tk1 = trip.truck_id || trucks[0].id
+  const tk2 = tRun.truck_id || trucks[1].id
+  const tk3 = tPlan.truck_id || trucks[2].id
+  const allTrucks = (await db.from('trucks').select('id, plate').order('code')).data || trucks
+  const tk4 = allTrucks.find((t) => ![tk1, tk2, tk3].includes(t.id))?.id || trucks[3].id
+  const dr1 = trip.driver_id || drivers[0].id
+  const ago = (h) => new Date(Date.now() - h * 3600000).toISOString()
+  const cost = (doc_no, row) => ensure('costs', 'doc_no', { doc_no, paid_by: 'company', source: 'manual', alloc_mode: 'auto', currency: 'EUR', fx_rate: 4.97, ...row })
+  // cursa de test (camion 1, 2–7 nov.): card, taxe pe țări, parcare plătită de șofer
+  await cost('DEMO-CARD-1', { occurred_at: '2026-11-04T10:00:00Z', category: 'fuel_card', truck_id: tk1, driver_id: dr1, amount: 780, liters: 520, country: 'DE', vendor: 'Stație demo DE', odometer: 414100 })
+  await cost('DEMO-TAXA-HU', { occurred_at: '2026-11-02T14:00:00Z', category: 'toll', truck_id: tk1, amount: 95, country: 'HU', vendor: 'Taxă drum HU (demo)' })
+  await cost('DEMO-TAXA-AT', { occurred_at: '2026-11-03T09:00:00Z', category: 'toll', truck_id: tk1, amount: 160, country: 'AT', vendor: 'Taxă drum AT (demo)' })
+  await cost('DEMO-TAXA-DE', { occurred_at: '2026-11-03T18:00:00Z', category: 'toll', truck_id: tk1, amount: 310, country: 'DE', vendor: 'Taxă drum DE (demo)' })
+  await cost('DEMO-PARCARE', { occurred_at: '2026-11-05T20:00:00Z', category: 'parking', paid_by: 'driver', truck_id: tk1, driver_id: dr1, amount: 25, country: 'DE', vendor: 'Parcare demo' })
+  // cursa în desfășurare (camion 2)
+  await cost('DEMO-CARD-2', { occurred_at: ago(3), category: 'fuel_card', truck_id: tk2, amount: 610, liters: 400, country: 'HU', vendor: 'Stație demo HU' })
+  await cost('DEMO-TAXA-HU-2', { occurred_at: ago(5), category: 'toll', truck_id: tk2, amount: 85, country: 'HU', vendor: 'Taxă drum HU (demo)' })
+  // nealocat: alimentare între curse (camion 3) — apare în „Nealocate"
+  await cost('DEMO-CARD-3', { occurred_at: '2026-11-09T12:00:00Z', category: 'fuel_card', truck_id: tk3, amount: 150, liters: 100, country: 'RO', vendor: 'Stație demo RO' })
+  // cost lunar al camionului 4: revizie
+  await cost('DEMO-SERVICE', { occurred_at: '2026-11-05T10:00:00Z', category: 'service', alloc_mode: 'truck', truck_id: tk4, amount: 1200, currency: 'RON', vendor: 'Service demo SRL' })
+
+  // rezervorul bazei: 2 intrări, 2 alimentări (la plecarea curselor)
+  const fuel = (doc_no, row) => ensure('fuel_stock_movements', 'doc_no', { doc_no, alloc_mode: 'auto', currency: 'RON', ...row })
+  await fuel('DEMO-RZ-IN-1', { kind: 'in', moved_at: '2026-10-28T08:00:00Z', liters: 5000, unit_price: 6.1, fx_rate: 4.97, vendor: 'Distribuitor carburant demo' })
+  await fuel('DEMO-RZ-IN-2', { kind: 'in', moved_at: '2026-11-06T08:00:00Z', liters: 3000, unit_price: 6.4, fx_rate: 4.97, vendor: 'Distribuitor carburant demo' })
+  await fuel('DEMO-RZ-OUT-1', { kind: 'out', moved_at: '2026-11-02T04:30:00Z', liters: 350, truck_id: tk1, odometer: 412300 })
+  await fuel('DEMO-RZ-OUT-2', { kind: 'out', moved_at: new Date(Date.parse(tRun.start_at) + 30 * 60000).toISOString(), liters: 400, truck_id: tk2, odometer: 288100 })
+
+  // costuri fixe lunare pe fiecare camion
+  for (const [i, t] of allTrucks.entries()) {
+    for (const [kind, amount_month] of [['Leasing', 1650 + i * 50], ['RCA', 200], ['CASCO', 230]]) {
+      const notes = `DEMO ${kind} ${t.plate}`
+      if (!(await one('fixed_costs', 'notes', notes))) {
+        const { error } = await db.from('fixed_costs').insert({ truck_id: t.id, kind, amount_month, currency: 'EUR', fx_rate: 4.97, valid_from: '2026-01-01', notes })
+        if (error) throw new Error(`fixed_costs: ${error.message}`)
+      }
+    }
+  }
+  // salariul pe noiembrie al șoferului 1 (cu bonus); ceilalți folosesc fișa de salariu
+  if (!(await db.from('payroll_months').select('id').eq('driver_id', dr1).eq('month', '2026-11-01')).data?.length) {
+    const { error } = await db.from('payroll_months').insert({ driver_id: dr1, month: '2026-11-01', gross: 5000, employer_taxes: 112.5, bonus: 500, currency: 'RON', fx_rate: 4.97, notes: 'Bonus demo' })
+    if (error) throw new Error(`payroll_months: ${error.message}`)
+  }
 }
 
 console.log('Gata. Conturi de test (parola pentru toate: %s):', PASSWORD)

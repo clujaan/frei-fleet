@@ -31,8 +31,8 @@ Conturi de test (doar local): patron@/dispecer@/contabil@demo.test, parola `Demo
 - Etapa 1 (schemă unificată `0001_baza.sql`, Supabase local, curățare): făcută.
 - Etapa 2 (Setări firmă, Utilizatori și roluri, culori/logo în PDF-uri, `0002`): făcută; în testare de Sergiu.
 - Etapa 3 (Flotă, cursa-circuit, comenzi multiple, grupaj + distribuție subcontractată, `0003`): făcută; acceptare confirmată de Sergiu pe 2026-11-10 (cursa de test cu tur EUR + retur RON = 2.800 EUR). Repartizare decisă: LDM implicit, schimbabil pe cursă (DECIZII). Calcule în `src/lib/tripMoney.js` (teste `tests/tripMoney.test.mjs`).
-- Etapa 4 (costuri, combustibil, profit): urmează; P&L-ul și `calcTrip` din `trips.js` sunt încă pe modelul vechi.
-- Etapele 4–9: vezi spec secț. 13.
+- Etapa 4 (costuri, combustibil, profit, `0004`): făcută; în testare de Sergiu. Calcule în `src/lib/fleetCosts.js` (teste `tests/fleetCosts.test.mjs`), import CSV card în `src/lib/costImport.js`. Pagini: Costuri flotă (`/costuri-flota`), Profit (`/pl`, înlocuiește P&L-ul vechi), secțiunea „Costuri și profit" în cursă, Dashboard pe luna curentă.
+- Ordinea următoare (decisă 2026-11-11, vezi DECIZII „Plan extins"): 4b Tabla flotei + găsirea returului → 5 Deconturi + diurnă → 5b Pachetul Mobilitate → 6 Documente + revizii → 6b CMR și încasări → 6c Facturare → 7–9.
 
 ## Cunoscute / amânate
 - Textul „Control Center" din meniu/login e încă cel vechi; se schimbă odată cu meniul.
@@ -43,4 +43,6 @@ Conturi de test (doar local): patron@/dispecer@/contabil@demo.test, parola `Demo
 - Coloanele vechi din `trips` (client, puncte, venit, cost) rămân în tabel, dar cursa nouă nu le mai folosește; punctele și prețul stau pe comandă.
 - Calculul automat de km pe cursă (din puncte) a fost scos din fereastra cursei; km vin din kilometraj sau se trec de mână.
 - Tools → Camioane (cost/km) și Flota folosesc același tabel `trucks`; se unesc vizual mai târziu.
+- Cursa intră în profitul lunii în care a plecat din bază. Costurile cu camion fără cursă potrivită apar în „Nealocate" și intră la costul camionului pe lună.
+- `calcTrip` din `trips.js` și `pl.js` (folosit de Cheltuieli) sunt încă pe modelul vechi; P&L-ul vechi (PL.jsx, plExport, WeeklyChart) a fost scos.
 - Formularul de client ascuns (`ImportClientFormModal`) creează încă curse pe modelul vechi.

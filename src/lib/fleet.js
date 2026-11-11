@@ -62,14 +62,8 @@ export const PAY_API = {
   },
 }
 
-// Costul lunar al angajatorului: cel trecut explicit sau brut × (1 + procent taxe)
-export function monthlyEmployerCost(p) {
-  if (!p) return 0
-  const explicit = Number(p.employer_cost_month)
-  if (explicit > 0) return explicit
-  const gross = Number(p.monthly_gross) || 0
-  return Math.round(gross * (1 + (Number(p.employer_pct) || 0) / 100) * 100) / 100
-}
+// Costul lunar al angajatorului (calculul e în fleetCosts.js, testat)
+export { monthlyEmployerCost } from './fleetCosts'
 
 export const truckLabel = (t) => (t ? [t.plate, [t.make, t.model].filter(Boolean).join(' ') || t.label].filter(Boolean).join(' · ') : '')
 export const activeOr = (rows, id) => (rows || []).filter((r) => r.status !== 'Inactiv' || r.id === id)

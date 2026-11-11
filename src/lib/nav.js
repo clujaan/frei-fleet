@@ -17,6 +17,7 @@ export const NAV = [
       { key: 'offers', to: '/oferte' },
       { key: 'places', to: '/adrese' },
       { key: 'fleet', to: '/flota' },
+      { key: 'fleetCosts', to: '/costuri-flota' },
       { key: 'trips', to: '/curse' },
       { key: 'orders', to: '/comenzi' },
       { key: 'clientOrders', to: '/comanda-client' },

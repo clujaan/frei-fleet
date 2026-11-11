@@ -1,12 +1,9 @@
 import { useEffect, useState } from 'react'
 import { supabase, isDemo } from './supabase'
-import { TRIPS_API } from './trips'
-import { ORDERS_API } from './orders'
 import { CLIENTS } from './entities'
 import { routeLabel } from './places'
-import { costsApi } from './costsApi'
-import { calcCost, mondayOf } from './costs'
-import { computePeriod, weekInfo, weeksOfYear } from './pl'
+import { calcCost } from './costs'
+import { computeFleet, loadFleetData } from './fleetCostsApi'
 import { todayISO } from './format'
 
 // Valorile din dashboard. `null` = încă nu avem date pentru acel indicator
@@ -23,6 +20,7 @@ const EMPTY = {
   leadsNew: null,
   clientsNew: null,
   tripsWeek: null,
+  unallocated: null,
   offersActive: null,
   dueSteps: [],
   tripsRunning: [],
@@ -48,24 +46,21 @@ const monthEnd = (ym) => {
   return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10)
 }
 
-// Casetele Financiar, în EUR, din aceleași date ca P&L-ul (curse după data încărcării + cheltuieli generale)
+// Casetele Financiar, în EUR, din aceleași calcule ca pagina Profit (luna curentă; cursa intră în luna plecării din bază)
 async function loadFinance() {
   try {
-    const [trips, costs, orders, clients] = await Promise.all([TRIPS_API.list(), costsApi.list(), ORDERS_API.list().catch(() => null), CLIENTS.api.list().catch(() => [])])
-    const ctTrips = orders ? new Set(orders.filter((x) => x.trip_id && x.status !== 'Anulată').map((x) => x.trip_id)) : undefined
-    const data = { trips, costs, ctTrips }
+    const [data, clients] = await Promise.all([loadFleetData(), CLIENTS.api.list().catch(() => [])])
+    const { trips, overhead: costs } = data
+    const fleet = computeFleet(data, 'EUR')
     const cName = Object.fromEntries(clients.map((c) => [c.id, c.company]))
     // „în desfășurare" = curse cu statusul În desfășurare (stocat „În curs"): camionul a plecat din bază și nu s-a întors
     const tripsRunning = trips.filter((x) => x.status === 'În curs')
       .sort((a, b) => String(a.start_at || a.load_date).localeCompare(String(b.start_at || b.load_date)))
       .map((x) => ({ title: `${x.code}${routeLabel(x) ? ' · ' + routeLabel(x) : cName[x.client_id] ? ' · ' + cName[x.client_id] : ''}`, meta: `${String(x.start_at || x.load_date || '').slice(0, 10)} · ÎN DESFĂȘURARE`, to: '/curse' }))
-    const nowMonday = mondayOf(todayISO())
-    const weeks = weeksOfYear(weekInfo(nowMonday).year).filter((w) => w.monday <= nowMonday)
-    const week = weeks.filter((w) => w.monday === nowMonday)
-    const w = computePeriod(week, data, 'EUR')
-    const ytd = computePeriod(weeks, data, 'EUR')
-    // costuri recurente active în luna curentă (net, fără TVA deductibil), în EUR; anualele se împart la 12
     const ym = todayISO().slice(0, 7)
+    const m = fleet.month(ym).total
+    const ytd = Array.from({ length: Number(ym.slice(5, 7)) }, (_, i) => `${ym.slice(0, 4)}-${String(i + 1).padStart(2, '0')}`).reduce((s, x) => s + fleet.month(x).total.netProfit, 0)
+    // costuri recurente active în luna curentă (net, fără TVA deductibil), în EUR; anualele se împart la 12
     const recurring = costs.reduce((s, c) => {
       if (c.cost_type !== 'Recurent lunar' && c.cost_type !== 'Recurent anual') return s
       if (!c.start_on || c.start_on > monthEnd(ym) || (c.end_on && c.end_on < `${ym}-01`)) return s
@@ -73,12 +68,13 @@ async function loadFinance() {
       return s + (c.cost_type === 'Recurent anual' ? k.netEur / 12 : k.netEur)
     }, 0)
     return {
-      weekProfit: w.profit,
-      cumProfit: ytd.profit,
-      weekRevenue: w.totalSales,
-      weekCost: w.totalCosts + w.totalOverhead,
+      weekProfit: m.netProfit,
+      cumProfit: Math.round(ytd * 100) / 100,
+      weekRevenue: m.revenue,
+      weekCost: Math.round((m.direct + m.fixed + m.truckOther + m.salaries + m.overhead) * 100) / 100,
       recurring,
-      tripsWeek: w.trips,
+      tripsWeek: m.trips,
+      unallocated: fleet.unallocated.length,
       tripsRunning,
     }
   } catch {

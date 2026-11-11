@@ -18,7 +18,8 @@ import Comenzi from './pages/Comenzi'
 import ComandaClient from './pages/ComandaClient'
 import Curse from './pages/Curse'
 import Flota from './pages/Flota'
-import PL from './pages/PL'
+import CosturiFlota from './pages/CosturiFlota'
+import Profit from './pages/Profit'
 import ToolTrucks from './pages/ToolTrucks'
 import ToolEstimator from './pages/ToolEstimator'
 import ToolMargin from './pages/ToolMargin'
@@ -82,9 +83,10 @@ export default function App() {
               <Route path="tools/taxe-drum" element={<ToolTolls />} />
               <Route path="tools/marja" element={<ToolMargin />} />
               <Route path="tools/convertor" element={<ToolFx />} />
-              <Route path="pl" element={<PL />} />
+              <Route path="pl" element={<Profit />} />
               <Route path="curse" element={<Curse />} />
               <Route path="flota" element={<Flota />} />
+              <Route path="costuri-flota" element={<CosturiFlota />} />
               <Route path="comenzi" element={<Comenzi />} />
               <Route path="comanda-client" element={<ComandaClient />} />
               <Route path="setari" element={<Setari />} />

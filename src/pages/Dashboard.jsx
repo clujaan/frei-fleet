@@ -166,6 +166,7 @@ export default function Dashboard() {
         <Kpi code="FAC" label={t('dash.receivable')} value={fmtMoney(d.receivable)} unit="EUR" accent="orange" />
         <Kpi code="RES" label={t('dash.overdue')} value={fmtMoney(d.overdue)} unit="EUR" accent="red" />
         <Kpi code="REC" label={t('dash.recurring')} value={fmtMoney(d.recurring)} unit="EUR" accent="blue" />
+        <Kpi code="NAL" label={t('dash.unalloc')} value={d.unallocated == null ? '—' : String(d.unallocated)} unit="" accent={d.unallocated ? 'red' : 'blue'} />
       </div>
 
       <Section title={t('dash.activity')} sub={t('dash.activitySub')} />
