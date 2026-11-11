@@ -17,6 +17,7 @@ import { COSTS_API, FUEL_API, computeFleet } from '../lib/fleetCostsApi'
 import { PER_DIEM_API } from '../lib/fleet'
 import { TRIP_LINES, categoryLabel } from '../lib/fleetCosts'
 import { CostModal } from './CosturiFlota'
+import { tripPlan } from '../lib/fleetBoard'
 import LockGate from '../lib/editLock'
 import { ACTIVITY_API } from '../lib/activity'
 import { useReason } from '../components/ReasonModal'
@@ -68,7 +69,7 @@ async function fillFx(rows, api) {
   return ok
 }
 
-const EMPTY = { kind: 'own', truck_id: '', trailer_id: '', driver_id: '', driver2_id: '', start_at: '', end_at: '', km_start: '', km_end: '', km: '', countries: [], status: 'Planificată', allocation_basis: '', notes: '' }
+const EMPTY = { kind: 'own', truck_id: '', trailer_id: '', driver_id: '', driver2_id: '', start_at: '', end_at: '', km_start: '', km_end: '', km: '', km_empty: '', no_return_ok: false, countries: [], status: 'Planificată', allocation_basis: '', notes: '' }
 
 function TripModal({ initial, fleet, clients, carriers, ccRows, ctRows, links, pnl, trips, onClose, onSaved, onChanged }) {
   const tx = useTx()
@@ -125,6 +126,7 @@ function TripModal({ initial, fleet, clients, carriers, ccRows, ctRows, links, p
         ...(initial || {}), ...f, ...model,
         truck_id: own ? f.truck_id || null : null, trailer_id: own ? f.trailer_id || null : null, driver_id: own ? f.driver_id || null : null, driver2_id: own ? f.driver2_id || null : null,
         km: f.km === '' ? (km || null) : parseNum(f.km), km_start: f.km_start === '' ? null : parseNum(f.km_start), km_end: f.km_end === '' ? null : parseNum(f.km_end),
+        km_empty: f.km_empty === '' || f.km_empty == null ? null : parseNum(f.km_empty), no_return_ok: !!f.no_return_ok,
         allocation_basis: f.allocation_basis || null, load_date: model.start_at ? toLocalInput(model.start_at).slice(0, 10) : (initial?.load_date || null),
         unload_date: model.end_at ? toLocalInput(model.end_at).slice(0, 10) : (initial?.unload_date || null),
       }
@@ -186,6 +188,7 @@ function TripModal({ initial, fleet, clients, carriers, ccRows, ctRows, links, p
           {own && <label className={lbl}>{tx('Km la plecare', 'Km at departure')}<input inputMode="numeric" className={input} value={f.km_start} onChange={set('km_start')} /></label>}
           {own && <label className={lbl}>{tx('Km la întoarcere', 'Km at return')}<input inputMode="numeric" className={input} value={f.km_end} onChange={set('km_end')} /></label>}
           <label className={lbl}>{tx('Km total (dacă nu ai kilometraj)', 'Total km (without odometer)')}<input inputMode="numeric" className={input} value={f.km} onChange={set('km')} placeholder={km ? String(km) : ''} /></label>
+          {own && <label className={lbl} title={tx('Km parcurși fără marfă (ex. până la prima încărcare, între descărcare și retur)', 'Km driven without goods (e.g. to the first loading, between unload and return)')}>{tx('Km goi (fără marfă)', 'Empty km (no goods)')}<input inputMode="numeric" className={input} value={f.km_empty ?? ''} onChange={set('km_empty')} /></label>}
           <div className="text-[12px] text-slate-600">{tx('Durată / km', 'Duration / km')}<div className="mt-1 rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-[14px] text-slate-700">{days ? `${days} ${tx(days === 1 ? 'zi' : 'zile', days === 1 ? 'day' : 'days')}` : '—'} · {km ? `${km} km` : '—'}</div></div>
           <label className={lbl}>{tx('Status', 'Status')}
             <select className={input} value={f.status} onChange={async (e) => {
@@ -212,6 +215,7 @@ function TripModal({ initial, fleet, clients, carriers, ccRows, ctRows, links, p
               </select>
             </div>
           </div>
+          {own && <label className="flex items-center gap-2 text-[13px] text-slate-700 sm:col-span-4"><input type="checkbox" checked={!!f.no_return_ok} onChange={(e) => setF((s) => ({ ...s, no_return_ok: e.target.checked }))} />{tx('Camionul se întoarce gol intenționat (nu mai apare la „fără retur" pe Tabla flotei)', 'The truck returns empty on purpose (no longer flagged “no return” on the Fleet board)')}</label>}
           <label className={`${lbl} sm:col-span-4`}>{tx('Observații', 'Notes')}<textarea rows={2} className={input} value={f.notes} onChange={set('notes')} /></label>
         </div>
 
@@ -393,6 +397,14 @@ export default function Curse() {
     setRows(r); setClients(c); setCarriers(k); setFleet({ trucks: tk, trailers: tr, drivers: dr }); setCcRows(cc); setCtRows(ct); setLinks(ln); setExtra({ costs: co, moves: mv, rates: rt })
   }).catch((e) => setErr(e.message))
   useEffect(() => { load() }, [])
+  // link direct (ex. din Tabla flotei): /curse?open=<id>
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('open')
+    if (!id || !rows) return
+    const t = rows.find((x) => x.id === id)
+    if (t) setModal(t)
+    window.history.replaceState(null, '', window.location.pathname)
+  }, [rows])
 
   const truckById = useMemo(() => Object.fromEntries(fleet.trucks.map((x) => [x.id, x])), [fleet.trucks])
   const trailerById = useMemo(() => Object.fromEntries(fleet.trailers.map((x) => [x.id, x])), [fleet.trailers])
@@ -410,6 +422,7 @@ export default function Curse() {
     const clientsTxt = [...new Set(orders.filter((o) => o.status !== 'Anulată').map((o) => cName[o.client_id]).filter(Boolean))]
     const warns = checkOwnTrip(t, orders)
     if (rev.missingFx.length) warns.push('fx')
+    if (tripPlan(t, orders, getCompany().country || 'RO').needsReturn) warns.push('noReturn')
     const hay = foldText([t.code, truck, trailerById[t.trailer_id]?.plate, driver, ...clientsTxt, ...orders.map((o) => `${o.code} ${orderRoute(o)}`), (t.countries || []).join(' '), t.notes, tripStatusLabel(t.status, lang)].join(' | '))
     const pnl = calc.pnlById[t.id]
     return { t, orders, rev, pnl, truck, driver, clientsTxt, warns, hay }
@@ -510,7 +523,7 @@ export default function Curse() {
                   <td className="px-3 py-3">
                     <span className="font-medium">{rev.count}</span> <span className="text-slate-600">{clientsTxt.slice(0, 3).join(', ')}{clientsTxt.length > 3 ? ` +${clientsTxt.length - 3}` : ''}</span>
                     {(t.countries || []).length > 0 && <div className="text-[11.5px] text-slate-500">{t.countries.join(' · ')}</div>}
-                    {warns.length > 0 && t.status !== 'Anulată' && <div className="text-[11.5px] text-amber-600">⚠ {{ truck: tx('fără camion', 'no truck'), driver: tx('fără șofer', 'no driver'), start: tx('fără dată de plecare', 'no departure'), noOrders: tx('fără comenzi', 'no orders'), fx: tx('comenzi fără curs', 'orders without rate'), dates: tx('date greșite', 'wrong dates'), km: tx('km greșiți', 'wrong km'), sameDriver: tx('același șofer de 2 ori', 'same driver twice') }[warns[0]]}</div>}
+                    {warns.length > 0 && t.status !== 'Anulată' && <div className="text-[11.5px] text-amber-600">⚠ {{ truck: tx('fără camion', 'no truck'), driver: tx('fără șofer', 'no driver'), start: tx('fără dată de plecare', 'no departure'), noOrders: tx('fără comenzi', 'no orders'), fx: tx('comenzi fără curs', 'orders without rate'), noReturn: tx('fără retur', 'no return'), dates: tx('date greșite', 'wrong dates'), km: tx('km greșiți', 'wrong km'), sameDriver: tx('același șofer de 2 ori', 'same driver twice') }[warns[0]]}</div>}
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums">{fmtMoney(rev.total)}{rev.missingFx.length > 0 && <div className="text-[11px] text-amber-600">+ {rev.missingFx.length} {tx('fără curs', 'no rate')}</div>}</td>
                   <td className={`whitespace-nowrap px-3 py-3 text-right tabular-nums ${!pnl || t.status === 'Anulată' ? '' : pnl.contribution < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>{pnl && t.status !== 'Anulată' ? fmtMoney(pnl.contribution) : '—'}{pnl?.marginPct != null && t.status !== 'Anulată' && <div className="text-[11px] text-slate-500">{pnl.marginPct}%</div>}</td>

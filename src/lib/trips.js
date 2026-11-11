@@ -75,6 +75,8 @@ const TRIPS_BASE = makeEntityApi({
     { key: 'kind' }, { key: 'truck_id' }, { key: 'trailer_id' }, { key: 'driver_id' }, { key: 'driver2_id' },
     { key: 'start_at' }, { key: 'end_at' }, { key: 'km_start', type: 'number' }, { key: 'km_end', type: 'number' },
     { key: 'countries', type: 'json' }, { key: 'allocation_basis' },
+    // tabla flotei (migrarea 0005)
+    { key: 'km_empty', type: 'number' }, { key: 'no_return_ok', type: 'bool' },
   ],
 })
 

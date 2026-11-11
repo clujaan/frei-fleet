@@ -19,6 +19,7 @@ import ComandaClient from './pages/ComandaClient'
 import Curse from './pages/Curse'
 import Flota from './pages/Flota'
 import CosturiFlota from './pages/CosturiFlota'
+import TablaFlotei from './pages/TablaFlotei'
 import Profit from './pages/Profit'
 import ToolTrucks from './pages/ToolTrucks'
 import ToolEstimator from './pages/ToolEstimator'
@@ -87,6 +88,7 @@ export default function App() {
               <Route path="curse" element={<Curse />} />
               <Route path="flota" element={<Flota />} />
               <Route path="costuri-flota" element={<CosturiFlota />} />
+              <Route path="tabla-flotei" element={<TablaFlotei />} />
               <Route path="comenzi" element={<Comenzi />} />
               <Route path="comanda-client" element={<ComandaClient />} />
               <Route path="setari" element={<Setari />} />

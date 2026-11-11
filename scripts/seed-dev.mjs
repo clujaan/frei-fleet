@@ -306,5 +306,18 @@ else {
   }
 }
 
+// ---- Etapa 4b: oferte de retur pentru Tabla flotei + km goi — totul FICTIV ----
+// cursa în desfășurare descarcă în PL (mâine), cea planificată în DE: oferte care încarcă acolo și vin spre RO
+await insertMissing('freight_offers', 'notes', [
+  fo('retur 1', { received_on: dayRel(0), exchange: 'Trans.eu', company: 'Expeditor Demo G', contact_name: 'Contact G', load_country: 'PL', load_place: 'Miasto Przykład', load_date: dayRel(1), unload_country: 'RO', unload_place: 'Oraș Exemplu', unload_date: dayRel(3), km: 1150, cargo: 'Paleți (retur demo)', weight_t: 16, vehicle_type: 'Prelată', price: 1250, status: 'Cerută' }),
+  fo('retur 2', { received_on: dayRel(0), exchange: 'Timocom', company: 'Expeditor Demo H', load_country: 'PL', load_place: 'Miasto Drugie', load_date: dayRel(2), unload_country: 'RO', unload_place: 'Oraș Demo', km: 1300, cargo: 'Marfă generală (retur demo)', weight_t: 20, vehicle_type: 'Megatrailer', price: 1050, status: 'Ofertată' }),
+  fo('retur 3', { received_on: dayRel(0), exchange: 'Trans.eu', company: 'Expeditor Demo I', load_country: 'CZ', load_place: 'Příkladov', load_date: dayRel(1), unload_country: 'RO', unload_place: 'Oraș Exemplu', km: 1050, cargo: 'Piese (retur demo)', weight_t: 10, vehicle_type: 'Prelată', price: 6200, currency: 'RON', status: 'Cerută' }),
+  fo('retur 4', { received_on: dayRel(0), exchange: 'Timocom', company: 'Expeditor Demo J', load_country: 'DE', load_place: 'Beispielstadt', load_date: dayRel(5), load_date_alt: dayRel(6), unload_country: 'RO', unload_place: 'Oraș Demo', km: 1500, cargo: 'Congelate (retur demo)', weight_t: 18, vehicle_type: 'Frigorific', price: 1700, status: 'Cerută' }),
+  fo('retur 5', { received_on: dayRel(0), exchange: 'Altă', company: 'Expeditor Demo K', load_country: 'AT', load_place: 'Beispielort', load_date: dayRel(6), unload_country: 'HU', unload_place: 'Példaváros', extra_unloads: [{ country: 'RO', place: 'Oraș Exemplu', date: '' }], km: 1100, cargo: 'Grupaj (retur demo)', weight_t: 9, vehicle_type: 'Prelată', price: 1350, status: 'Cerută' }),
+])
+if (!(await db.from('trips').select('km_empty').limit(1)).error) {
+  if (trip.km_empty == null) { const { error } = await db.from('trips').update({ km_empty: 250 }).eq('id', trip.id); if (error) throw error }
+} else console.log('Atenție: migrarea 0005 nu e aplicată (npx supabase migration up). Sar peste km goi.')
+
 console.log('Gata. Conturi de test (parola pentru toate: %s):', PASSWORD)
 for (const u of USERS) console.log(`  ${u.role.padEnd(10)} ${u.email}`)

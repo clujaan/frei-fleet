@@ -402,6 +402,14 @@ export default function Burse() {
   }, [rows])
   const load = () => OFFERS_API.list().then(setRows).catch((e) => setErr(e.message))
   useEffect(() => { load() }, [])
+  // link direct (ex. din Tabla flotei): /oferte?open=<id>
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('open')
+    if (!id || !rows) return
+    const o = rows.find((x) => x.id === id)
+    if (o) setModal(o)
+    window.history.replaceState(null, '', window.location.pathname)
+  }, [rows])
 
   const all = rows || []
   const enriched = useMemo(() => all.map((o) => ({ o, hay: offerHaystack(o), warns: checkOffer(o) })), [rows])

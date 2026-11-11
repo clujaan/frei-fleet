@@ -8,6 +8,7 @@ import { getCompany } from '../lib/company'
 import { CLIENTS } from '../lib/entities'
 import { computeFleet, loadFleetData } from '../lib/fleetCostsApi'
 import { monthKey } from '../lib/fleetCosts'
+import { emptyKmByTruck } from '../lib/fleetBoard'
 import { fmtMoney, todayISO } from '../lib/format'
 
 const input = 'rounded-lg border border-slate-300 bg-white px-3 py-2 text-[14px] text-navy-800 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20'
@@ -45,6 +46,7 @@ export default function Profit() {
   const driverById = Object.fromEntries(data.drivers.map((d) => [d.id, d]))
   const cName = Object.fromEntries(clients.map((c) => [c.id, c.company]))
   const T = R.total
+  const emptyKm = emptyKmByTruck(data.trips, ym)
   const tripsInMonth = fleet.rows.filter(({ trip }) => trip.status !== 'Anulată' && monthKey(trip.start_at || trip.load_date) === ym)
     .sort((a, b) => String(a.trip.start_at || '').localeCompare(String(b.trip.start_at || '')))
   const unallocated = fleet.unallocated.filter((it) => monthKey(it.occurred_at || it.moved_at) === ym).length
@@ -154,7 +156,7 @@ export default function Profit() {
 
         {tab === 'trucks' && (
           <table className="w-full text-left text-[13.5px]">
-            <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500"><tr><th className={th}>{tx('Camion', 'Truck')}</th><th className={`${th} text-right`}>{tx('Curse', 'Trips')}</th><th className={`${th} hidden sm:table-cell text-right`}>km</th><th className={`${th} text-right`}>{tx('Profit curse', 'Trip profit')}</th><th className={`${th} text-right`}>{tx('Fixe', 'Fixed')}</th><th className={`${th} text-right`}>{tx('Alte', 'Other')}</th><th className={`${th} text-right`}>{tx('Salarii', 'Salaries')}</th><th className={`${th} text-right`}>{tx('Profit', 'Profit')}</th><th className={`${th} hidden md:table-cell text-right`}>{tx('Profit / km', 'Profit / km')}</th></tr></thead>
+            <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500"><tr><th className={th}>{tx('Camion', 'Truck')}</th><th className={`${th} text-right`}>{tx('Curse', 'Trips')}</th><th className={`${th} hidden sm:table-cell text-right`}>km</th><th className={`${th} text-right`}>{tx('Profit curse', 'Trip profit')}</th><th className={`${th} text-right`}>{tx('Fixe', 'Fixed')}</th><th className={`${th} text-right`}>{tx('Alte', 'Other')}</th><th className={`${th} text-right`}>{tx('Salarii', 'Salaries')}</th><th className={`${th} text-right`}>{tx('Profit', 'Profit')}</th><th className={`${th} hidden md:table-cell text-right`}>{tx('Profit / km', 'Profit / km')}</th><th className={`${th} hidden lg:table-cell text-right`} title={tx('Din „km goi" trecuți pe curse', 'From “empty km” entered on trips')}>{tx('% km goi', '% empty km')}</th></tr></thead>
             <tbody>
               {[...R.trucks].sort((a, b) => b.profit - a.profit).map((r) => (
                 <tr key={r.truck_id} className="border-t border-slate-100">
@@ -167,9 +169,10 @@ export default function Profit() {
                   <td className={`${td} text-right tabular-nums text-slate-600`}>{r.salary ? `−${fmtMoney(r.salary)}` : '—'}</td>
                   <td className={`${td} text-right font-medium tabular-nums ${tone(r.profit)}`}>{fmtMoney(r.profit)}</td>
                   <td className={`${td} hidden text-right tabular-nums md:table-cell`}>{r.km ? fmtMoney(r.profit / r.km) : '—'}</td>
+                  <td className={`${td} hidden text-right tabular-nums lg:table-cell ${(emptyKm[r.truck_id]?.pct ?? 0) > 15 ? 'text-amber-700' : ''}`}>{emptyKm[r.truck_id]?.pct != null ? `${emptyKm[r.truck_id].pct}%` : '—'}{emptyKm[r.truck_id]?.missing ? <div className="text-[10.5px] text-slate-400">{emptyKm[r.truck_id].missing} {tx('fără km goi', 'without empty km')}</div> : null}</td>
                 </tr>
               ))}
-              {R.subcontracted.trips > 0 && <tr className="border-t border-slate-100 text-slate-600"><td className={td}>{tx('Curse subcontractate', 'Subcontracted trips')}</td><td className={`${td} text-right tabular-nums`}>{R.subcontracted.trips}</td><td className="hidden sm:table-cell" /><td className={`${td} text-right tabular-nums`}>{fmtMoney(R.subcontracted.contribution)}</td><td colSpan={3} /><td className={`${td} text-right font-medium tabular-nums ${tone(R.subcontracted.contribution)}`}>{fmtMoney(R.subcontracted.contribution)}</td><td className="hidden md:table-cell" /></tr>}
+              {R.subcontracted.trips > 0 && <tr className="border-t border-slate-100 text-slate-600"><td className={td}>{tx('Curse subcontractate', 'Subcontracted trips')}</td><td className={`${td} text-right tabular-nums`}>{R.subcontracted.trips}</td><td className="hidden sm:table-cell" /><td className={`${td} text-right tabular-nums`}>{fmtMoney(R.subcontracted.contribution)}</td><td colSpan={3} /><td className={`${td} text-right font-medium tabular-nums ${tone(R.subcontracted.contribution)}`}>{fmtMoney(R.subcontracted.contribution)}</td><td className="hidden md:table-cell" /><td className="hidden lg:table-cell" /></tr>}
             </tbody>
           </table>
         )}

@@ -32,7 +32,8 @@ Conturi de test (doar local): patron@/dispecer@/contabil@demo.test, parola `Demo
 - Etapa 2 (Setări firmă, Utilizatori și roluri, culori/logo în PDF-uri, `0002`): făcută; în testare de Sergiu.
 - Etapa 3 (Flotă, cursa-circuit, comenzi multiple, grupaj + distribuție subcontractată, `0003`): făcută; acceptare confirmată de Sergiu pe 2026-11-10 (cursa de test cu tur EUR + retur RON = 2.800 EUR). Repartizare decisă: LDM implicit, schimbabil pe cursă (DECIZII). Calcule în `src/lib/tripMoney.js` (teste `tests/tripMoney.test.mjs`).
 - Etapa 4 (costuri, combustibil, profit, `0004`): făcută; în testare de Sergiu. Calcule în `src/lib/fleetCosts.js` (teste `tests/fleetCosts.test.mjs`), import CSV card în `src/lib/costImport.js`. Pagini: Costuri flotă (`/costuri-flota`), Profit (`/pl`, înlocuiește P&L-ul vechi), secțiunea „Costuri și profit" în cursă, Dashboard pe luna curentă.
-- Ordinea următoare (decisă 2026-11-11, vezi DECIZII „Plan extins"): 4b Tabla flotei + găsirea returului → 5 Deconturi + diurnă → 5b Pachetul Mobilitate → 6 Documente + revizii → 6b CMR și încasări → 6c Facturare → 7–9.
+- Etapa 4b (Tabla flotei + găsirea returului, `0005`): făcută; în testare de Sergiu. Calcule în `src/lib/fleetBoard.js` (teste `tests/fleetBoard.test.mjs`). Pagina `/tabla-flotei`; „fără retur" = ultima descărcare în străinătate pe o cursă deschisă (se poate marca „se întoarce gol"); km goi se trec de mână pe cursă.
+- Ordinea următoare (decisă 2026-11-11, vezi DECIZII „Plan extins"): 5 Deconturi + diurnă → 5b Pachetul Mobilitate → 6 Documente + revizii → 6b CMR și încasări → 6c Facturare → 7–9.
 
 ## Cunoscute / amânate
 - Textul „Control Center" din meniu/login e încă cel vechi; se schimbă odată cu meniul.
